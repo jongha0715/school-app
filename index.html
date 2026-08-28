@@ -1,0 +1,406 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>수행평가 & 시험 관리 일정표</title>
+  
+  <!-- PWA 설정 연동 -->
+  <link rel="manifest" href="manifest.json">
+  <meta name="theme-color" content="#007aff">
+
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; font-family: sans-serif; }
+    body { background-color: #1a1a1a; padding: 20px; max-width: 600px; margin: 0 auto; color: #e0e0e0; position: relative; min-height: 100vh; }
+    
+    .header-container { text-align: center; margin-bottom: 24px; }
+    .user-title-btn {
+      background: #007aff;
+      color: white;
+      border: none;
+      padding: 10px 24px;
+      font-size: 18px;
+      font-weight: bold;
+      border-radius: 20px;
+      cursor: pointer;
+      box-shadow: 0 4px 10px rgba(0,122,255,0.3);
+    }
+
+    .hidden-admin-btn {
+      position: fixed;
+      bottom: 0;
+      right: 0;
+      width: 50px;
+      height: 50px;
+      background: transparent;
+      border: none;
+      cursor: pointer;
+      z-index: 999;
+    }
+
+    .tab-content { display: none; }
+    .tab-content.active { display: block; }
+
+    .card { background: #2d2d2d; padding: 16px; border-radius: 12px; margin-bottom: 16px; box-shadow: 0 4px 12px rgba(0,0,0,0.3); border: 1px solid #3d3d3d; }
+    .form-group { margin-bottom: 12px; }
+    .form-group label { display: block; font-size: 14px; font-weight: bold; margin-bottom: 6px; color: #b0b0b0; }
+    
+    .form-group input, .form-group select, .form-group textarea { width: 100%; padding: 8px; border: 1px solid #4d4d4d; border-radius: 6px; background-color: #1a1a1a; color: #e0e0e0; }
+    .form-group input::placeholder, .form-group textarea::placeholder { color: #666; }
+
+    input[type="date"]::-webkit-calendar-picker-indicator {
+      filter: invert(1);
+      cursor: pointer;
+    }
+
+    .add-btn { width: 100%; padding: 12px; background: #28a745; color: white; border: none; border-radius: 8px; font-size: 16px; font-weight: bold; cursor: pointer; transition: background 0.2s; }
+    .add-btn:hover { background: #218838; }
+
+    .timetable-card { text-align: center; background: #252525; border: 1px solid #007aff; }
+    .timetable-img { max-width: 100%; border-radius: 8px; margin-top: 10px; border: 1px solid #4d4d4d; }
+
+    .item-header { display: flex; justify-content: space-between; align-items: center; cursor: pointer; color: #e0e0e0; }
+    .badge { padding: 4px 8px; border-radius: 4px; font-size: 12px; color: white; font-weight: bold; }
+    .badge.performance { background: #e67e22; }
+    .badge.exam { background: #c0392b; }
+    
+    .dday-badge { padding: 4px 8px; border-radius: 4px; font-size: 12px; font-weight: bold; background: #007aff; color: white; margin-left: 6px; }
+    .dday-badge.urgent { background: #ff3b30; }
+
+    .item-details { max-height: 0; overflow: hidden; transition: max-height 0.3s ease-out; margin-top: 0; }
+    .item-card.open .item-details { max-height: 500px; margin-top: 12px; border-top: 1px solid #4d4d4d; padding-top: 12px; }
+
+    .file-preview img { max-width: 100%; border-radius: 6px; margin-top: 8px; border: 1px solid #4d4d4d; }
+    .file-link { display: inline-block; margin-top: 8px; color: #3498db; text-decoration: none; word-break: break-all; }
+    
+    .delete-btn { background: #dc3545; color: white; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer; font-size: 12px; }
+
+    .admin-item-row { display: flex; justify-content: space-between; align-items: center; padding: 10px 0; border-bottom: 1px solid #3d3d3d; }
+    .admin-item-row:last-child { border-bottom: none; }
+
+    h2, h3 { color: #ffffff; }
+  </style>
+</head>
+<body>
+
+  <div class="header-container">
+    <button class="user-title-btn" onclick="switchTab('user')">😊</button>
+  </div>
+
+  <button class="hidden-admin-btn" onclick="switchTab('admin')"></button>
+
+  <!-- 1. 사용자 탭 -->
+  <div id="user-tab" class="tab-content active">
+    <div class="card timetable-card">
+      <h3 style="margin-bottom: 8px;">📅 학급 시간표</h3>
+      <div id="timetable-display">
+        <p style="color: #888; font-size: 14px;">등록된 시간표가 없습니다.</p>
+      </div>
+    </div>
+
+    <h2 style="margin-bottom: 16px;">수행평가 및 시험 정보</h2>
+    <div id="item-list">불러오는 중...</div>
+  </div>
+
+  <!-- 2. 관리자 탭 -->
+  <div id="admin-tab" class="tab-content">
+    <h2 style="margin-bottom: 12px;">시간표 관리</h2>
+    <div class="card">
+      <div class="form-group">
+        <label>학급 시간표 파일/사진 업로드</label>
+        <input type="file" id="timetable-file-input">
+      </div>
+      <button class="add-btn" style="background: #007aff;" onclick="uploadTimetable()">시간표 업데이트</button>
+      <button class="delete-btn" style="width:100%; margin-top:8px;" onclick="deleteTimetable()">시간표 삭제</button>
+    </div>
+
+    <h2 style="margin-bottom: 12px; margin-top: 24px;">수행평가/시험 정보 등록</h2>
+    <div class="card">
+      <div class="form-group">
+        <label>구분</label>
+        <select id="type">
+          <option value="performance">수행평가</option>
+          <option value="exam">시험</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>제목 (과목 및 내용)</label>
+        <input type="text" id="title" placeholder="예: 국어 수행평가 - 시 분석">
+      </div>
+      <div class="form-group">
+        <label>마감일 / 시험일</label>
+        <input type="date" id="date">
+      </div>
+      <div class="form-group">
+        <label>상세 설명</label>
+        <textarea id="description" rows="3" placeholder="제출 내용 및 주의사항 입력"></textarea>
+      </div>
+      <div class="form-group">
+        <label>사진 또는 파일 첨부</label>
+        <input type="file" id="file-input">
+      </div>
+      <button class="add-btn" onclick="addItem()">+ 항목 추가하기</button>
+    </div>
+
+    <h2 style="margin-bottom: 12px; margin-top: 24px;">등록된 항목 삭제 및 관리</h2>
+    <div class="card">
+      <div id="admin-item-list">
+        <p style="color: #888; font-size: 14px;">등록된 항목이 없습니다.</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- Firebase 모듈 라이브러리 로드 -->
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
+    import { getFirestore, collection, addDoc, deleteDoc, doc, onSnapshot, setDoc } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+
+    // Firebase 설정 정보
+    const firebaseConfig = {
+      apiKey: "AIzaSyCXGFzGFZTqshIIDQMYEKSu0IIHZkNxHhU",
+      authDomain: "test-cdafb.firebaseapp.com",
+      projectId: "test-cdafb",
+      storageBucket: "test-cdafb.firebasestorage.app",
+      messagingSenderId: "1010823713970",
+      appId: "1:1010823713970:web:89e1d9bd7f8996bd24e5ab",
+      measurementId: "G-9WKBJQ2QMD"
+    };
+
+    const app = initializeApp(firebaseConfig);
+    const db = getFirestore(app);
+
+    const ADMIN_PASSWORD = "1234";
+    let items = [];
+    let timetableData = null;
+
+    // 1. 실시간 일정 데이터 동기화
+    onSnapshot(collection(db, "schedules"), (snapshot) => {
+      items = [];
+      snapshot.forEach((doc) => {
+        items.push({ id: doc.id, ...doc.data() });
+      });
+      renderUserItems();
+      renderAdminItems();
+    });
+
+    // 2. 실시간 시간표 동기화
+    onSnapshot(collection(db, "timetable"), (snapshot) => {
+      snapshot.forEach((doc) => {
+        if (doc.id === "main") {
+          timetableData = doc.data();
+        }
+      });
+      renderTimetable();
+    });
+
+    window.switchTab = function(tabName) {
+      if (tabName === 'admin') {
+        const inputPw = prompt("관리자 비밀번호를 입력하세요:");
+        if (inputPw !== ADMIN_PASSWORD) {
+          alert("비밀번호가 올바르지 않습니다.");
+          return;
+        }
+        renderAdminItems();
+      }
+
+      document.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active'));
+
+      if (tabName === 'user') {
+        document.getElementById('user-tab').classList.add('active');
+      } else {
+        document.getElementById('admin-tab').classList.add('active');
+      }
+    };
+
+    window.uploadTimetable = function() {
+      const fileInput = document.getElementById('timetable-file-input');
+      const file = fileInput.files[0];
+
+      if (!file) {
+        alert('시간표 파일을 선택해주세요.');
+        return;
+      }
+
+      const reader = new FileReader();
+      reader.onload = async function(e) {
+        const data = {
+          url: e.target.result,
+          name: file.name,
+          isImage: file.type.startsWith('image/')
+        };
+        await setDoc(doc(db, "timetable", "main"), data);
+        alert('시간표가 실시간으로 업데이트되었습니다.');
+        fileInput.value = '';
+      };
+      reader.readAsDataURL(file);
+    };
+
+    window.deleteTimetable = async function() {
+      if(confirm('등록된 시간표를 삭제하시겠습니까?')) {
+        await deleteDoc(doc(db, "timetable", "main"));
+        timetableData = null;
+        renderTimetable();
+        alert('시간표가 삭제되었습니다.');
+      }
+    };
+
+    function renderTimetable() {
+      const container = document.getElementById('timetable-display');
+      if (!timetableData || !timetableData.url) {
+        container.innerHTML = '<p style="color: #888; font-size: 14px;">등록된 시간표가 없습니다.</p>';
+        return;
+      }
+
+      if (timetableData.isImage) {
+        container.innerHTML = `<img src="${timetableData.url}" class="timetable-img" alt="학급 시간표">`;
+      } else {
+        container.innerHTML = `<a class="file-link" href="${timetableData.url}" download="${timetableData.name}">📎 시간표 파일 다운로드: ${timetableData.name}</a>`;
+      }
+    }
+
+    function getDDay(targetDateStr) {
+      const today = new Date();
+      today.setHours(0,0,0,0);
+      const target = new Date(targetDateStr);
+      target.setHours(0,0,0,0);
+      
+      const diff = Math.ceil((target - today) / (1000 * 60 * 60 * 24));
+      
+      if (diff > 0) return `D-${diff}`;
+      if (diff === 0) return `D-DAY`;
+      return `지남`;
+    }
+
+    window.addItem = function() {
+      const type = document.getElementById('type').value;
+      const title = document.getElementById('title').value;
+      const date = document.getElementById('date').value;
+      const description = document.getElementById('description').value;
+      const fileInput = document.getElementById('file-input');
+      const file = fileInput.files[0];
+
+      if (!title || !date) {
+        alert('제목과 날짜를 모두 입력해주세요.');
+        return;
+      }
+
+      const saveItem = async (fileUrl = null, fileName = null, isImage = false) => {
+        await addDoc(collection(db, "schedules"), {
+          type,
+          title,
+          date,
+          description,
+          fileUrl,
+          fileName,
+          isImage,
+          createdAt: Date.now()
+        });
+        clearForm();
+        alert('항목이 모든 학생 화면에 추가되었습니다.');
+      };
+
+      if (file) {
+        const reader = new FileReader();
+        reader.onload = function(e) {
+          saveItem(e.target.result, file.name, file.type.startsWith('image/'));
+        };
+        reader.readAsDataURL(file);
+      } else {
+        saveItem();
+      }
+    };
+
+    window.deleteItem = async function(id) {
+      if(confirm('이 항목을 정말 삭제하시겠습니까?')) {
+        await deleteDoc(doc(db, "schedules", id));
+        alert('삭제되었습니다.');
+      }
+    };
+
+    function clearForm() {
+      document.getElementById('title').value = '';
+      document.getElementById('date').value = '';
+      document.getElementById('description').value = '';
+      document.getElementById('file-input').value = '';
+    }
+
+    function renderAdminItems() {
+      const adminContainer = document.getElementById('admin-item-list');
+      if (!adminContainer) return;
+      adminContainer.innerHTML = '';
+
+      if (items.length === 0) {
+        adminContainer.innerHTML = '<p style="color: #888; font-size: 14px;">등록된 항목이 없습니다.</p>';
+        return;
+      }
+
+      items.sort((a, b) => new Date(a.date) - new Date(b.date));
+
+      items.forEach(item => {
+        const row = document.createElement('div');
+        row.className = 'admin-item-row';
+        const typeText = item.type === 'performance' ? '[수행]' : '[시험]';
+
+        row.innerHTML = `
+          <div>
+            <span style="font-size: 12px; color: #888;">${typeText} ${item.date}</span>
+            <div style="font-size: 15px; font-weight: bold; margin-top: 2px;">${item.title}</div>
+          </div>
+          <button class="delete-btn" onclick="deleteItem('${item.id}')">삭제</button>
+        `;
+        adminContainer.appendChild(row);
+      });
+    }
+
+    function renderUserItems() {
+      const listContainer = document.getElementById('item-list');
+      if (!listContainer) return;
+      listContainer.innerHTML = '';
+
+      if (items.length === 0) {
+        listContainer.innerHTML = '<p style="text-align:center; color:#888;">등록된 수행평가/시험 정보가 없습니다.</p>';
+        return;
+      }
+
+      items.sort((a, b) => new Date(a.date) - new Date(b.date));
+
+      items.forEach(item => {
+        const card = document.createElement('div');
+        card.className = 'card item-card';
+
+        const typeText = item.type === 'performance' ? '수행평가' : '시험';
+        const typeClass = item.type === 'performance' ? 'performance' : 'exam';
+        
+        const ddayText = getDDay(item.date);
+        const isUrgent = ddayText === 'D-DAY' || (ddayText.startsWith('D-') && parseInt(ddayText.replace('D-', '')) <= 3);
+        const ddayClass = isUrgent ? 'urgent' : '';
+
+        let fileHTML = '';
+        if (item.fileUrl) {
+          if (item.isImage) {
+            fileHTML = `<div class="file-preview"><img src="${item.fileUrl}" alt="첨부 이미지"></div>`;
+          } else {
+            fileHTML = `<a class="file-link" href="${item.fileUrl}" download="${item.fileName}">📎 파일 다운로드: ${item.fileName}</a>`;
+          }
+        }
+
+        card.innerHTML = `
+          <div class="item-header" onclick="this.parentElement.classList.toggle('open')">
+            <div>
+              <span class="badge ${typeClass}">${typeText}</span>
+              <span class="dday-badge ${ddayClass}">${ddayText}</span>
+              <strong style="margin-left: 8px; font-size: 16px;">${item.title}</strong>
+            </div>
+            <span style="color: #888; font-size: 14px;">${item.date} ▼</span>
+          </div>
+          <div class="item-details">
+            <p style="white-space: pre-wrap; font-size: 14px; color: #cccccc;">${item.description || '상세 내용이 없습니다.'}</p>
+            ${fileHTML}
+          </div>
+        `;
+        listContainer.appendChild(card);
+      });
+    }
+  </script>
+</body>
+</html>
